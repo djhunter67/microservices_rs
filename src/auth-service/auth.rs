@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use crate::{sessions::Sessions, users::Users};
 
 // use tonic::codegen::http::status;
-use tonic::{IntoRequest, Request, Response, Status};
+use tonic::{Request, Response, Status};
 
 use authentication::auth_server::Auth;
 use authentication::{
@@ -60,7 +60,7 @@ impl Auth for AuthService {
             user_uuid: "".to_owned(),
         };
 
-        match user_uuid {
+        let user_uuid = match user_uuid {
             None => {
                 let reply = SignInResponse {
                     status_code: StatusCode::Failure.into(),
@@ -69,19 +69,20 @@ impl Auth for AuthService {
                 };
                 return Ok(Response::new(reply));
             }
-            Some(_) => (),
+            Some(uuid) => uuid,
         };
 
         // and `user_uuid`/`session_token` set to empty strings.
 
         // Create new session using `sessions_service`. Panic if the lock is poisoned.
-        let mut session_token = match self.sessions_service.lock() {
+        let session_token = match self.sessions_service.lock() {
             Ok(sessions_service) => sessions_service,
             Err(_) => panic!("Poisoned lock"),
-        };
+        }
+        .create_session(&user_uuid);
 
-        sigin.session_token = session_token.create_session(&user_uuid.clone().unwrap());
-        sigin.user_uuid = user_uuid.unwrap();
+        sigin.session_token = session_token;
+        sigin.user_uuid = user_uuid;
         sigin.status_code = StatusCode::Success.into();
 
         println!("USER signin: {:?}", sigin);
@@ -136,7 +137,8 @@ impl Auth for AuthService {
         }
         .expect("Unable to lock")
         .delete_session(&req.session_token);
-        // Create `SignOutResponse` with `status_code` set to `Success`
+        
+	// Create `SignOutResponse` with `status_code` set to `Success`
         let reply: SignOutResponse = SignOutResponse {
             status_code: StatusCode::Success.into(),
         };
